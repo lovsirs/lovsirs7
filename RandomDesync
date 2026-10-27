@@ -1,0 +1,164 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local repo = "https://raw.githubusercontent.com/alebinh60/asmobile/refs/heads/main/"
+local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
+local Toggles = Library.Toggles
+
+local Window = Library:CreateWindow({
+    Title = "",
+    Footer = "desync",
+    Icon = 241778280,
+    NotifySide = "Right",
+    Compact = true,
+    AutoShow = true,
+})
+local Tab = Window:AddTab("Player", "users")
+
+-- state
+local Desync = {
+    Enabled = false,
+    RandomAmount = 20,
+    Visualize = false,
+}
+
+-- visualize clone
+local BodyCloneDesync = game:GetObjects("rbxassetid://8246626421")[1]
+BodyCloneDesync.Parent = workspace
+BodyCloneDesync.Humanoid:Destroy()
+BodyCloneDesync.Head.Face:Destroy()
+for _, v in pairs(BodyCloneDesync:GetDescendants()) do
+    if v:IsA("BasePart") or v:IsA("MeshPart") then
+        v.CanCollide = false
+        v.Transparency = 0
+    end
+end
+BodyCloneDesync.HumanoidRootPart.Transparency = 0.5
+BodyCloneDesync.HumanoidRootPart.Velocity = Vector3.zero
+BodyCloneDesync.HumanoidRootPart.CFrame = CFrame.new(9999, 9999, 9999)
+
+local Highlight = Instance.new("Highlight")
+Highlight.Enabled = false
+Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+Highlight.FillColor = Color3.fromRGB(0, 255, 0)
+Highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+Highlight.FillTransparency = 0.3
+Highlight.OutlineTransparency = 0
+Highlight.Adornee = BodyCloneDesync
+Highlight.Parent = BodyCloneDesync
+
+local GlowLight = Instance.new("PointLight")
+GlowLight.Color = Color3.fromRGB(0, 255, 100)
+GlowLight.Brightness = 4
+GlowLight.Range = 2
+GlowLight.Parent = BodyCloneDesync.HumanoidRootPart
+
+-- camera setback part
+local setback = Instance.new("Part")
+setback.Name = "DesyncSetback"
+setback.Size = Vector3.new(2, 2, 1)
+setback.CanCollide = false
+setback.Anchored = true
+setback.Transparency = 1
+setback.Parent = workspace
+
+local function resetCamera()
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid")
+    if hum then Camera.CameraSubject = hum end
+end
+
+local function hideClone()
+    Highlight.Enabled = false
+    BodyCloneDesync:SetPrimaryPartCFrame(CFrame.new(9999, 9999, 9999))
+end
+
+-- core
+local conn = RunService.Heartbeat:Connect(function()
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        hideClone()
+        return
+    end
+
+    local oldCFrame = hrp.CFrame
+    local desyncCFrame = oldCFrame
+
+    if Desync.Enabled then
+        local amount = Desync.RandomAmount
+        local offset = Vector3.new(
+            math.random(-amount, amount),
+            math.random(-amount / 2, amount / 2),
+            math.random(-amount, amount)
+        )
+        desyncCFrame = CFrame.new(oldCFrame.Position + offset) * oldCFrame.Rotation
+
+        hrp.CFrame = desyncCFrame
+        Camera.CameraSubject = setback
+        RunService.RenderStepped:Wait()
+        setback.CFrame = oldCFrame * CFrame.new(0, hrp.Size.Y / 2 + 0.5, 0)
+        hrp.CFrame = oldCFrame
+    end
+
+    if Desync.Visualize and Desync.Enabled then
+        BodyCloneDesync:SetPrimaryPartCFrame(desyncCFrame)
+        Highlight.Enabled = true
+    else
+        hideClone()
+    end
+end)
+
+-- ui
+local Group = Tab:AddLeftGroupbox("Desync")
+
+Group:AddToggle("DesyncEnabled", {
+    Text = "Enabled",
+    Default = false,
+    Callback = function(Value)
+        Desync.Enabled = Value
+        if not Value then resetCamera() end
+    end,
+}):AddKeyPicker("DesyncKeybind", {
+    Default = "None",
+    NoUI = true,
+    Text = "Desync Key",
+    Callback = function()
+        Toggles.DesyncEnabled:SetValue(not Toggles.DesyncEnabled.Value)
+    end,
+})
+
+Group:AddSlider("DesyncRandomAmount", {
+    Text = "Random Amount",
+    Default = 20,
+    Min = 1,
+    Max = 5000,
+    Rounding = 0,
+    Callback = function(Value)
+        Desync.RandomAmount = Value
+    end,
+})
+
+Group:AddToggle("DesyncVisualize", {
+    Text = "Visualize Desync",
+    Default = false,
+    Callback = function(Value)
+        Desync.Visualize = Value
+    end,
+}):AddColorPicker("DesyncVizColor", {
+    Default = Color3.fromRGB(0, 255, 0),
+    Title = "Color",
+    Callback = function(Value)
+        Highlight.FillColor = Value
+        GlowLight.Color = Value
+    end,
+})
+
+Library:OnUnload(function()
+    conn:Disconnect()
+    Desync.Enabled = false
+    resetCamera()
+    BodyCloneDesync:Destroy()
+    setback:Destroy()
+end)
